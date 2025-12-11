@@ -1,16 +1,18 @@
-const path = require('path')
-const protoLoader = require('@grpc/proto-loader')
-const grpc = require('grpc')
+const path = require('path');
+const fs = require('fs');
+
+const protoLoader = require('@grpc/proto-loader');
+const grpc = require('grpc');
 
 // grpc service definition
-const userProtoPath = path.join(__dirname, "..", "Protos", "user.proto")
+const userProtoPath = path.join(__dirname, '..', 'Protos', 'user.proto');
 const userProtoDefinition = protoLoader.loadSync(userProtoPath, {
-    keepCase: true,
-    longs: String,
-    enums: String,
-    defaults: true,
-    oneofs: true
-})
+  keepCase: true,
+  longs: String,
+  enums: String,
+  defaults: true,
+  oneofs: true,
+});
 
 
 async function sleep(interval) {
@@ -23,23 +25,23 @@ async function sleep(interval) {
 const userPackageDefinition = grpc.loadPackageDefinition(userProtoDefinition).user;
 
 function getUser(call, callback){
-    var first_name = call.request.user.first_name;
-    var last_name = call.request.user.last_name;
-    var id = 1;
-    var email = "test@gmail.com"
+  const first_name = call.request.user.first_name;
+  const last_name = call.request.user.last_name;
+  const id = 1;
+  const email = 'test@gmail.com';
 
-    callback(null, {result: {first_name, last_name, id, email}})
+  callback(null, {result: {first_name, last_name, id, email}});
 }
 
 
-function getManyUsers(call, callback){
-    var firstName = call.request.user.first_name;
+function getManyUsers(call){
+  const firstName = call.request.user.first_name;
 
-    let count = 0,
-    intervalID = setInterval(function() {
+  let count = 0,
+    intervalID = setInterval(() => {
 
-    call.write({result: firstName});
-    if (++count > 7) {
+      call.write({result: firstName});
+      if (++count > 7) {
         clearInterval(intervalID);
         call.end();
       }
@@ -47,48 +49,48 @@ function getManyUsers(call, callback){
 }
 
 function longMessage(call, callback){
-    call.on("data", request => {
-        console.log(request.user.first_name)
-        var fullName =
-        request.user.first_name +
-          " " +
-          request.user.last_name;
+  call.on('data', request => {
+    console.log(request.user.first_name);
+    const fullName =
+        `${request.user.first_name
+        } ${
+          request.user.last_name}`;
 
-        console.log("Hello " + fullName);
-      });
-
-      call.on("error", error => {
-        console.error(error);
-      });
-
-      call.on("end", () => {
-        callback(null, {result: "Client Streaming Ended!"})
-      });
-}
-
- async function messageToEveryone(call, callback){
-  call.on("data", response => {
-    var fullName =
-      response.user.first_name;
-
-    console.log("Hello " + fullName);
+    console.log(`Hello ${ fullName}`);
   });
 
-  call.on("error", error => {
+  call.on('error', error => {
     console.error(error);
   });
 
-  call.on("end", () => {
-    console.log("Server The End...");
+  call.on('end', () => {
+    callback(null, {result: 'Client Streaming Ended!'});
+  });
+}
+
+async function messageToEveryone(call){
+  call.on('data', response => {
+    const fullName =
+      response.user.first_name;
+
+    console.log(`Hello ${ fullName}`);
   });
 
-  for (var i = 0; i < 10; i++) {
+  call.on('error', error => {
+    console.error(error);
+  });
 
-    var request = {
+  call.on('end', () => {
+    console.log('Server The End...');
+  });
+
+  for (let i = 0; i < 10; i++) {
+
+    const request = {
       user: {
-        first_name: 'ADMIN'
-      }
-    }
+        first_name: 'ADMIN',
+      },
+    };
 
     call.write({result: request.user.first_name});
     await sleep(1000);
@@ -98,18 +100,31 @@ function longMessage(call, callback){
 }
 
 function main(){
-    const server = new grpc.Server()
-    server.addService(userPackageDefinition.UserService.service, {
-        getUser: getUser,
-        getManyUsers: getManyUsers,
-        longMessage: longMessage,
-        messageToEveryone: messageToEveryone
-    })
+  const server = new grpc.Server();
+  server.addService(userPackageDefinition.UserService.service, {
+    getUser: getUser,
+    getManyUsers: getManyUsers,
+    longMessage: longMessage,
+    messageToEveryone: messageToEveryone,
+  });
 
-    server.bind("127.0.0.1:50051",grpc.ServerCredentials.createInsecure())
-    server.start()
-    console.log("Server is running on port 50051");
+  // Use secure credentials with TLS instead of insecure connection
+  const serverCert = fs.readFileSync(process.env.SERVER_CERT_PATH || path.join(__dirname, 'certs', 'server-cert.pem'));
+  const serverKey = fs.readFileSync(process.env.SERVER_KEY_PATH || path.join(__dirname, 'certs', 'server-key.pem'));
+  const caCert = fs.readFileSync(process.env.CA_CERT_PATH || path.join(__dirname, 'certs', 'ca-cert.pem'));
+
+  const serverCredentials = grpc.ServerCredentials.createSsl(
+    caCert,
+    [{
+      cert_chain: serverCert,
+      private_key: serverKey,
+    }],
+    true, // checkClientCertificate
+  );
+
+  server.bind('127.0.0.1:50051', serverCredentials);
+  server.start();
+  console.log('Server is running on port 50051');
 }
 
-main()
-
+main();
