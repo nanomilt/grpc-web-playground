@@ -1,82 +1,91 @@
-const path = require('path')
-const protoLoader = require('@grpc/proto-loader')
-const grpc = require('grpc')
+const path = require('path');
+const fs = require('fs');
+
+const protoLoader = require('@grpc/proto-loader');
+const grpc = require('grpc');
 
 // grpc service definition
-const userProtoPath = path.join(__dirname, "..", "Protos", "user.proto")
+const userProtoPath = path.join(__dirname, '..', 'Protos', 'user.proto');
 const userProtoDefinition = protoLoader.loadSync(userProtoPath, {
-    keepCase: true,
-    longs: String,
-    enums: String,
-    defaults: true,
-    oneofs: true
-})
+  keepCase: true,
+  longs: String,
+  enums: String,
+  defaults: true,
+  oneofs: true,
+});
 
 // Create the package definition
 const userPackageDefinition = grpc.loadPackageDefinition(userProtoDefinition).user;
 
-const client = new userPackageDefinition.UserService("localhost:50051",
-    grpc.credentials.createInsecure()
-)
+// Create secure credentials with SSL/TLS
+const sslCreds = grpc.credentials.createSsl(
+  fs.readFileSync(path.join(__dirname, '..', 'certs', 'ca.crt')),
+  fs.readFileSync(path.join(__dirname, '..', 'certs', 'client.key')),
+  fs.readFileSync(path.join(__dirname, '..', 'certs', 'client.crt')),
+);
+
+const client = new userPackageDefinition.UserService('localhost:50051',
+  sslCreds,
+);
 
 function getUserInfo(){
-    var request = {
-        user: {
-            first_name: "Borna",
-            last_name: "Nematzadeh"
-        }
-    }
+  const request = {
+    user: {
+      first_name: 'Borna',
+      last_name: 'Nematzadeh',
+    },
+  };
 
-    client.getUser(request, (error, response) => {
-        if(!error){
-            console.log("Server Response:", response.result)
-        }else{
-            console.error(error)
-        }
-    })
+  client.getUser(request, (error, response) => {
+    if(!error){
+      console.log('Server Response:', response.result);
+    }else{
+      console.error(error);
+    }
+  });
 }
 
 function callGetManyUsers(){
 
-    var request = {
-        user: {
-            first_name: "Borna"
-        }
-    }
+  const request = {
+    user: {
+      first_name: 'Borna',
+    },
+  };
 
-    var call = client.getManyUsers(request, () => {});
-    call.on("data", response => {
-        console.log("Server Streaming Response: ", response.result);
-      });
+  const call = client.getManyUsers(request, () => {});
+  call.on('data', response => {
+    console.log('Server Streaming Response: ', response.result);
+  });
 
-    call.on("end", () => {
-        console.log("Streaming Ended!");
-      });
+  call.on('end', () => {
+    console.log('Streaming Ended!');
+  });
 
 }
 
 function callLongMessage(){
-    var request = {
-        user: {
-            first_name: "Borna",
-            last_name: "Nematzadeh"
-        }
-    }
+  const request = {
+    user: {
+      first_name: 'Borna',
+      last_name: 'Nematzadeh',
+    },
+  };
 
 
-  var call = client.LongMessage(request, (error, response) => {
+  const call = client.LongMessage(request, (error, response) => {
     if(!error){
-        console.log("Server Response:", response.result)
+      console.log('Server Response:', response.result);
     }else{
-        console.error(error)
+      console.error(error);
     }
-})
+  });
 
   let count = 0,
-    intervalID = setInterval(function() {
-    console.log("Sending message " + count);
+    intervalID = setInterval(() => {
+      console.log(`Sending message ${ count}`);
 
-      console.log(request.user.first_name)
+      console.log(request.user.first_name);
       call.write(request);
       if (++count > 3) {
         clearInterval(intervalID);
@@ -86,9 +95,9 @@ function callLongMessage(){
 }
 
 function main(){
-    // getUserInfo()
-    // callGetManyUsers()
-    callLongMessage()
+  // getUserInfo()
+  // callGetManyUsers()
+  callLongMessage();
 }
 
-main()
+main();

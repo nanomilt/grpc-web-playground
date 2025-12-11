@@ -1,38 +1,40 @@
-const path = require('path')
-const protoLoader = require('@grpc/proto-loader')
-const grpc = require('grpc')
+const path = require('path');
+const fs = require('fs');
+
+const protoLoader = require('@grpc/proto-loader');
+const grpc = require('grpc');
 
 // grpc service definition
-const userProtoPath = path.join(__dirname, "..", "Protos", "user.proto")
+const userProtoPath = path.join(__dirname, '..', 'Protos', 'user.proto');
 const userProtoDefinition = protoLoader.loadSync(userProtoPath, {
-    keepCase: true,
-    longs: String,
-    enums: String,
-    defaults: true,
-    oneofs: true
-})
+  keepCase: true,
+  longs: String,
+  enums: String,
+  defaults: true,
+  oneofs: true,
+});
 
 // Create the package definition
 const userPackageDefinition = grpc.loadPackageDefinition(userProtoDefinition).user;
 
 function getUser(call, callback){
-    var first_name = call.request.user.first_name;
-    var last_name = call.request.user.last_name;
-    var id = 1;
-    var email = "test@gmail.com"
+  const first_name = call.request.user.first_name;
+  const last_name = call.request.user.last_name;
+  const id = 1;
+  const email = 'test@gmail.com';
 
-    callback(null, {result: {first_name, last_name, id, email}})
+  callback(null, {result: {first_name, last_name, id, email}});
 }
 
 
-function getManyUsers(call, callback){
-    var firstName = call.request.user.first_name;
+function getManyUsers(call, _){
+  const firstName = call.request.user.first_name;
 
-    let count = 0,
-    intervalID = setInterval(function() {
+  let count = 0,
+    intervalID = setInterval(() => {
 
-    call.write({result: firstName});
-    if (++count > 7) {
+      call.write({result: firstName});
+      if (++count > 7) {
         clearInterval(intervalID);
         call.end();
       }
@@ -40,37 +42,46 @@ function getManyUsers(call, callback){
 }
 
 function longMessage(call, callback){
-    call.on("data", request => {
-        console.log(request.user.first_name)
-        var fullName =
-        request.user.first_name +
-          " " +
-          request.user.last_name;
+  call.on('data', request => {
+    console.log(request.user.first_name);
+    const fullName =
+        `${request.user.first_name
+        } ${
+          request.user.last_name}`;
 
-        console.log("Hello " + fullName);
-      });
+    console.log(`Hello ${ fullName}`);
+  });
 
-      call.on("error", error => {
-        console.error(error);
-      });
+  call.on('error', error => {
+    console.error(error);
+  });
 
-      call.on("end", () => {
-        callback(null, {result: "Client Streaming Ended!"})
-      });
+  call.on('end', () => {
+    callback(null, {result: 'Client Streaming Ended!'});
+  });
 }
 
 function main(){
-    const server = new grpc.Server()
-    server.addService(userPackageDefinition.UserService.service, {
-        getUser: getUser,
-        getManyUsers: getManyUsers,
-        longMessage: longMessage
-    })
+  const server = new grpc.Server();
+  server.addService(userPackageDefinition.UserService.service, {
+    getUser: getUser,
+    getManyUsers: getManyUsers,
+    longMessage: longMessage,
+  });
 
-    server.bind("127.0.0.1:50051",grpc.ServerCredentials.createInsecure())
-    server.start()
-    console.log("Server is running on port 50051");
+  // Use secure credentials with TLS/SSL
+  const serverCredentials = grpc.ServerCredentials.createSsl(
+    fs.readFileSync(process.env.GRPC_SERVER_ROOT_CERT || path.join(__dirname, 'certs', 'ca.crt')),
+    [{
+      cert_chain: fs.readFileSync(process.env.GRPC_SERVER_CERT || path.join(__dirname, 'certs', 'server.crt')),
+      private_key: fs.readFileSync(process.env.GRPC_SERVER_KEY || path.join(__dirname, 'certs', 'server.key')),
+    }],
+    true,
+  );
+
+  server.bind('127.0.0.1:50051', serverCredentials);
+  server.start();
+  console.log('Server is running on port 50051');
 }
 
-main()
-
+main();

@@ -1,6 +1,7 @@
 const path = require('path')
 const protoLoader = require('@grpc/proto-loader')
 const grpc = require('grpc')
+const fs = require('fs')
 
 // grpc service definition
 const userProtoPath = path.join(__dirname, "..", "Protos", "user.proto")
@@ -31,10 +32,19 @@ function main(){
         getUser: getUser
     })
 
-    server.bind("127.0.0.1:50051",grpc.ServerCredentials.createInsecure())
+    // Use SSL/TLS credentials instead of insecure connection
+    const serverCredentials = grpc.ServerCredentials.createSsl(
+        fs.readFileSync(process.env.GRPC_CA_CERT_PATH || path.join(__dirname, 'certs', 'ca.crt')),
+        [{
+            cert_chain: fs.readFileSync(process.env.GRPC_SERVER_CERT_PATH || path.join(__dirname, 'certs', 'server.crt')),
+            private_key: fs.readFileSync(process.env.GRPC_SERVER_KEY_PATH || path.join(__dirname, 'certs', 'server.key'))
+        }],
+        true
+    )
+
+    server.bind("127.0.0.1:50051", serverCredentials)
     server.start()
     console.log("Server is running on port 50051");
 }
 
 main()
-
